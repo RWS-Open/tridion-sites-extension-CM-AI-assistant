@@ -75,7 +75,7 @@ Note: Placeholders(${title}, ${metadata}, ${tridion\_keywords}, ${addintionalCon
 
 1) Navigate to addons
 
-	https://addons.tridiondemo.com:83/addon/ui
+	https://addons.com:83/addon/ui
 
 2) Click on the Upload Add-on Package
 

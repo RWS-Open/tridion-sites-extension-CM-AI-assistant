@@ -2,18 +2,19 @@ import { useState, ChangeEvent, ReactNode } from 'react'
 import { Flex, Typography, Input, Checkbox, CheckboxChangeEvent, TreeSelect } from 'antd'
 import type { TreeDataNode } from 'antd';
 
-import { AiPromptProps, IConfiguration } from 'src/types';
+import { AiPromptProps, IConfiguration, SchemaListTypes } from 'src/types';
 import { styled } from 'styled-components';
 import { getConfiguration } from '@globals';
 const { Title } = Typography;
 const { TextArea } = Input;
 type ValueType = string;
+
 interface AiAssistantFormProps {
     aiPrompt: AiPromptProps;
     includeAdditionalContext: boolean;
+    categoryKeywords: TreeDataNode[];
     setAiPrompt: (aiPrompt: AiPromptProps) => void;
     handleAdditionalContext: (e: CheckboxChangeEvent) => void;
-    categoryKeywords: TreeDataNode[]
 }
 
 const StyledTreeSelect = styled(TreeSelect<ValueType>)`
@@ -37,6 +38,8 @@ const StyledTreeSelect = styled(TreeSelect<ValueType>)`
 const AiAssistantBot = ({ aiPrompt, includeAdditionalContext, categoryKeywords, setAiPrompt, handleAdditionalContext }: AiAssistantFormProps) => {
     const configuration = getConfiguration<IConfiguration>();
     const [keywords, setKeywords] = useState<string>();
+
+    // Handle Input change
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const formData = {
             ...aiPrompt,
@@ -44,6 +47,8 @@ const AiAssistantBot = ({ aiPrompt, includeAdditionalContext, categoryKeywords, 
         }
         setAiPrompt(formData)
     }
+
+    // Handle Keyword change
     const onChange = (newValue: string, labelList: ReactNode[]) => {
         //console.log(newValue, labelList);
         setKeywords(newValue);

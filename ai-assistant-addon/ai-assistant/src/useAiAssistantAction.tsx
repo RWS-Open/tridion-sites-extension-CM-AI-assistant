@@ -53,7 +53,7 @@ export const useAiAssistantAction = () => {
                     console.log("Modal Opened")
                 }
             } catch (error) {
-                console.log(error)
+                console.error("Failed to open AI Assistant Modal", error)                
             }
         }, [openModal])
     }

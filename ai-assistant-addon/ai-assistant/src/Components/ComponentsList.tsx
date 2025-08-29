@@ -1,28 +1,35 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { Button, Checkbox, CheckboxChangeEvent, Flex, List, Spin, Typography } from 'antd'
-import { FieldsValueDictionary, ItemsService, OrganizationalItemsService, VersionedItem } from '@tridion-sites/open-api-client';
+import { FieldsValueDictionary, ItemsService, OrganizationalItemsService, VersionedItem, Component as SchemaLinkedComponent, RepositoryLocalObject } from '@tridion-sites/open-api-client';
 import { Component, OrganizationalItem, TcmUri, mapToModel } from '@tridion-sites/models';
 import { LoadingOutlined, SyncOutlined } from '@ant-design/icons'
 import { htmlToText } from "html-to-text";
-import { AiPromptProps, FolderItems } from 'src/types';
+import { AiPromptProps, FolderItems, SchemaListTypes } from 'src/types';
 import { CustomIcons } from 'src/CustomIcons';
+import SchemaList from './SchemaList';
 
 const { Title, Text } = Typography
 interface ComponentsListProps {
-  tcmUri: TcmUri
-  folderTitle: string
-  selectedComponentId: string
+  tcmUri: TcmUri;
+  folderTitle: string;
+  selectedComponentId: string;
   showComponentList: boolean;
   aiPrompt: AiPromptProps;
   parentFolder: string;
-  toggleComponentList: () => void;
+  selectedSchema: string;
+  selectedFields: string;
+  schemaList: SchemaListTypes[];
+  setSchemaList: (schemaList: SchemaListTypes[]) => void;
+  setSelectedSchema: (selectedSchema: string) => void;
+  setSelectedFields: (selectedField: string) => void;
   setAiPrompt: (aiPrompt: AiPromptProps) => void;
   setSelectedComponentId: (compId: string) => void;
 }
-const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPrompt, showComponentList, parentFolder, setSelectedComponentId, toggleComponentList, setAiPrompt }: ComponentsListProps) => {
+const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPrompt, showComponentList, parentFolder, selectedSchema, selectedFields, schemaList, setSchemaList, setSelectedSchema, setSelectedFields, setSelectedComponentId, setAiPrompt }: ComponentsListProps) => {
   const [folderItems, setFolderItems] = useState<FolderItems[]>([]);
   const [containerId, setContainerId] = useState<string | null>(null);
   const [containerTitle, setContainerTitle] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
   useEffect(() => {
     fetchFolderItems(tcmUri.asString as string)
   }, [tcmUri])
@@ -32,18 +39,36 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
     setContainerTitle(folderTitle)
   }, [parentFolder])
 
+  useEffect(() => {
+    if (selectedSchema !== null) {
+      // const filterComponentsBySchema = folderItems.filter(item => item.linkedSchema && item.linkedSchema===selectedSchema || item.Type==="Folder")
+      //setFolderItems(filterComponentsBySchema)
+      fetchFolderItems(containerId as string)
+    }
+  }, [selectedSchema])
+
+  useEffect(() => {
+    if (selectedFields) {
+      fetchComponentData(selectedComponentId)
+    }
+  }, [selectedFields])
+
+  // Fetch folder items
   const fetchFolderItems = useCallback(async (folderId: string) => {
     try {
+      setIsLoading(true)
       const folderItems = await OrganizationalItemsService.getItemsFromContainer({
         escapedContainerId: folderId,
         useDynamicVersion: true,
       });
-      const filterComponents = folderItems.map(item => {
+      const items = selectedSchema ? filterBySchemaId(folderItems, selectedSchema) : folderItems
+      const filterComponents = items.map((item: (SchemaLinkedComponent)) => {
         return {
           Type: item.$type,
           Id: item.Id,
           Title: item.Title,
-          Icon: CustomIcons[item.$type as string]
+          Icon: CustomIcons[item.$type as string],
+          linkedSchema: item.Schema?.IdRef
           //Icon: item.$type === "Component" ? CustomIcons.Component : CustomIcons.Folder
         }
       })
@@ -52,12 +77,18 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
       const parentFolderTitle = folderItems[0].LocationInfo?.OrganizationalItem?.Title
       setContainerId(parentFolderId as string)
       setContainerTitle(parentFolderTitle as string)
+      setIsLoading(false)
     } catch (error) {
-      console.log(error)
+      console.error("Failed to fetch the folder items",error)
+      setIsLoading(false)
     }
+  }, [containerId, selectedSchema])
 
-  }, [containerId])
+  const filterBySchemaId = (items: RepositoryLocalObject[], schemdId: string) => {
+    return items.filter((item: SchemaLinkedComponent) => item.Schema?.IdRef && item.Schema.IdRef === schemdId || item.$type === "Folder")
+  }
 
+  // Fetch Parent folder by click on the arrow
   const fetchParentFolder = async (containerId: string) => {
     try {
       const response = await ItemsService.getItem({
@@ -76,10 +107,12 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
         fetchFolderItems(parentFolderId as string)
       }
     } catch (error) {
-      console.log(error)
+      console.error("Failed to fetch Parent folder",error)
     }
 
   }
+
+  // handle folder structure item selection
   const handleChange = (e: CheckboxChangeEvent) => {
     const target = e.target as any
     setSelectedComponentId(target.value);
@@ -89,38 +122,50 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
     }
   }
 
+  // Fetch selected component Data
   const fetchComponentData = async (compId: string) => {
     if (!compId) return;
     try {
+      //fetch component Data using ItemsService.getItem
       const response = await ItemsService.getItem({
         escapedItemId: compId,
         useDynamicVersion: true
       })
       const mapComponent = mapToModel<Component>(response)
       const data = mapComponent.content as FieldsValueDictionary
-      const objectkeys = Object.keys(data)
-      const content = objectkeys.filter(item => {
-        return typeof (data[item]) === "object" && data[item] !== null && data[item] !== undefined && data[item][0] !== undefined && data[item][0].hasOwnProperty("content")
-      })
-      /*  setComponentData({
-           headline: data["headline"],
-           content: data[content[0]][0]?.content
-       }) */
-      const parsedContent = htmlToText(data[content[0]][0]?.content, {
-        wordwrap: false,
-        selectors: [
-          { selector: 'a', options: { ignoreHref: true } },
-          { selector: 'img', format: 'skip' } // skip image tag
-        ]
-      });
+      const rawcontent = getContentByFieldName(data, selectedFields);
       const formData = {
         ...aiPrompt,
-        "additionalContext": parsedContent
+        "additionalContext": rawcontent.join("")
       }
       setAiPrompt(formData)
     } catch (error) {
       console.error('Failed to fetch item:', error);
     }
+  }
+
+  // Extract selected field content 
+  const getContentByFieldName = (data: FieldsValueDictionary, selectedFields: string) => {
+    return Object.entries(data || {}).reduce<string[]>((acc, [key, value]) => {
+      if (selectedFields===key && typeof value === "string") {
+        if (key === "content") {
+          const parsedContent = htmlToText(value, {
+            wordwrap: false,
+            selectors: [
+              { selector: 'a', options: { ignoreHref: true } },
+              { selector: 'img', format: 'skip' } // skip image tag
+            ]
+          });
+          acc.push(parsedContent);
+        } else {
+          acc.push(value);
+        }
+      }
+      if (value && typeof value === "object") {
+        acc.push(...getContentByFieldName(value, selectedFields));
+      }
+      return acc;
+    }, []);
   }
 
   return (
@@ -129,9 +174,21 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
         !showComponentList
         &&
         <Flex justify="space-between" align="flex-start" style={{ width: "100%", padding: "5px 0px" }}>
-          <Flex vertical>
+          <Flex vertical style={{ width: "100%" }}>
+            <Flex vertical gap={5} style={{ marginTop: 5, marginBottom: 10, paddingLeft: 10, paddingRight: 10 }}>
+              <SchemaList
+                publicationId={tcmUri.getPublicationUri().asString}
+                selectedSchema={selectedSchema}
+                selectedFields={selectedFields}
+                schemaList={schemaList}
+                setSelectedSchema={setSelectedSchema}
+                setSelectedFields={setSelectedFields}
+                setSchemaList={setSchemaList}
+              />
+            </Flex>
+
             <Flex align="center" justify='space-between' gap={3} style={{ marginTop: 5, marginBottom: 10, paddingLeft: 10, paddingRight: 10 }}>
-              <Flex>
+              <Flex align='center'>
                 <span onClick={() => fetchParentFolder(containerId as string)} style={{ cursor: "pointer" }}>
                   {CustomIcons.Arrow}
                 </span>
@@ -141,15 +198,14 @@ const ComponentsList = memo(({ tcmUri, folderTitle, selectedComponentId, aiPromp
                 </Title>
               </Flex>
               <Flex>
-                <Button type='default' onClick={() =>fetchFolderItems(containerId as string)}>
+                <Button type='default' onClick={() => fetchFolderItems(containerId as string)}>
                   <SyncOutlined />
                 </Button>
               </Flex>
-
             </Flex>
             <List
               loading={{
-                spinning: folderItems.length === 0,
+                spinning: isLoading,
                 indicator: <Spin indicator={<LoadingOutlined spin />} />,
               }}
               itemLayout="horizontal"

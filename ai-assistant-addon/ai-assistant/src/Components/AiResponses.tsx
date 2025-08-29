@@ -4,7 +4,7 @@ import { GoCopy } from "react-icons/go";
 import { AiGeneratedContent, AiPromptProps } from 'src/types'
 import { LoadingOutlined, SaveOutlined, SyncOutlined } from "@ant-design/icons"
 import { MouseEvent, useEffect, useRef, useState } from "react";
-import { Component, ItemsService, ModelType } from "@tridion-sites/open-api-client";
+import { Component, FieldsDefinitionDictionary, ItemsService, ModelType, Schema } from "@tridion-sites/open-api-client";
 import { useNotifications } from "@tridion-sites/extensions";
 import { TcmUri } from "@tridion-sites/models";
 interface AiResponsesProps {
@@ -12,8 +12,9 @@ interface AiResponsesProps {
     aiContentLoading: boolean;
     aiPrompt: AiPromptProps;
     tcmUri: TcmUri;
-    schemaId:string
-    regenerateAiContent: (e:MouseEvent<HTMLButtonElement>) => void;
+    schemaId: string;
+    selectedSchema: string;
+    regenerateAiContent: (e: MouseEvent<HTMLButtonElement>) => void;
 }
 const { Text } = Typography;
 
@@ -57,39 +58,75 @@ const GoCopyIcon = styled(GoCopy)`
         color:#ffffff !important;
     }
 `
-const AiResponses = ({ aiGeneratedContent, aiContentLoading, aiPrompt, tcmUri,schemaId, regenerateAiContent }: AiResponsesProps) => {
+const AiResponses = ({ aiGeneratedContent, aiContentLoading, aiPrompt, tcmUri, schemaId, selectedSchema, regenerateAiContent }: AiResponsesProps) => {
     const { notify } = useNotifications();
     const scrollToBottomRef = useRef<HTMLDivElement>(null);
     const [isComponentCreating, setIsComponentCreating] = useState<boolean>(false)
+
+    // Create Component
     const createComponent = async (e: MouseEvent<HTMLButtonElement>) => {
         setIsComponentCreating(true)
         try {
             const id = e.currentTarget.id;
+            // Fetch default Model for the selected item
             const defaultSchemaModel: Component = await ItemsService.getDefaultModel({
                 containerId: tcmUri.asString,
                 modelType: ModelType.COMPONENT
             })
-            defaultSchemaModel.Title = aiPrompt.context as string
-            const aiContent = aiGeneratedContent.filter(item => item.id === id)[0]?.content
+            // Fetch selected Schema Model
+            const selectedSchemaModel: Schema = await ItemsService.getItem({
+                escapedItemId: selectedSchema,
+                useDynamicVersion: true
+            })
+            const fields = selectedSchemaModel.Fields as FieldsDefinitionDictionary;
+            const bodyFields = Object.keys(fields);
+            const index = bodyFields.findIndex(field => ["body", "articleBody", "itemListElement"].includes(field));
+
+            defaultSchemaModel.Title = aiPrompt.context as string;
+            if(defaultSchemaModel.Content){
+                defaultSchemaModel.Content["headline"] =  aiPrompt.context;
+            }
+            const aiContent = aiGeneratedContent.filter(item => item.id === id)[0]?.content;
             //defaultSchemaModel.Schema.IdRef=schemaId as string
-            defaultSchemaModel.Content = {
-                ... defaultSchemaModel.Content,
-                headline: aiPrompt.context,
-                articleBody: [
-                    {
-                        content: aiContent,
-                        //content: `Here are some steps on how to file a insurance claim: 1. Determine the type of claim you need to file. 2. Gather all the necessary documents. 3. Contact your insurance company. 4. Provide a detailed account of the incident. 5. Follow up on your claim.`
-                    }
-                ]
+            if (fields["introduction"].MinOccurs > 0) {
+                defaultSchemaModel.Content = {
+                    ...defaultSchemaModel.Content,
+                    introduction: " "
+                }
+            } 
+            if (index !== -1) {
+                defaultSchemaModel.Content = {
+                    ...defaultSchemaModel.Content,
+                    //headline: aiPrompt.context,
+                    //introduction: " ",
+                    [bodyFields[index]]: [
+                        {
+                            $type: "FieldsValueDictionary",
+                            content: aiContent,                           
+                            //content: `Here are some steps on how to file a insurance claim: 1. Determine the type of claim you need to file. 2. Gather all the necessary documents. 3. Contact your insurance company. 4. Provide a detailed account of the incident. 5. Follow up on your claim.`
+                        }
+                    ]
+                }
+            } else {
+                defaultSchemaModel.Content = {
+                    ...defaultSchemaModel.Content,
+                    //headline: aiPrompt.context,
+                    content: aiContent,
+                    //content: `Here are some steps on how to file a insurance claim: 1. Determine the type of claim you need to file. 2. Gather all the necessary documents. 3. Contact your insurance company. 4. Provide a detailed account of the incident. 5. Follow up on your claim.`
+                }
             }
-            if(schemaId && defaultSchemaModel.Schema){
-                defaultSchemaModel.Schema.IdRef = schemaId
+            
+
+            if (schemaId && defaultSchemaModel.Schema) {
+                defaultSchemaModel.Schema.IdRef = selectedSchema ? selectedSchema : schemaId
             }
+
+            //Item service to Create component
             try {
                 const response = await ItemsService.create({
                     requestModel: defaultSchemaModel
                 })
-                console.log(response)
+                //console.log(response)
                 notify({
                     showInMessageCenter: true,
                     title: "Success",
@@ -99,7 +136,7 @@ const AiResponses = ({ aiGeneratedContent, aiContentLoading, aiPrompt, tcmUri,sc
                 setIsComponentCreating(false)
                 //setAiGeneratedContent(null)
             } catch (error) {
-                console.log("Failed to create component:", error)
+                console.error("Failed to create component:", error)
                 notify({
                     title: "Failed",
                     type: "error",
@@ -108,7 +145,7 @@ const AiResponses = ({ aiGeneratedContent, aiContentLoading, aiPrompt, tcmUri,sc
                 setIsComponentCreating(false)
             }
         } catch (error) {
-            console.log("Failed to generate default model:", error)
+            console.error("Failed to generate default model:", error)
             notify({
                 title: "Failed",
                 type: "error",
@@ -118,9 +155,10 @@ const AiResponses = ({ aiGeneratedContent, aiContentLoading, aiPrompt, tcmUri,sc
         }
     }
 
-    useEffect(() =>{
+    useEffect(() => {
         scrollToBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    },[])
+    }, [])
+
     return (
         <Flex vertical style={{ overflowY: "auto", padding: "0px 25px" }} ref={scrollToBottomRef}>
             {

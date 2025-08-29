@@ -5,13 +5,12 @@ import { TcmUri } from '@tridion-sites/models';
 import type { TreeDataNode } from 'antd';
 
 import { BedrockAiService } from "src/Services/BedrockAiService";
-import { AiGeneratedContent, AiPromptProps, BedRockModel, IConfiguration } from "src/types";
+import { AiGeneratedContent, AiPromptProps, BedRockModel, IConfiguration, SchemaListTypes } from "src/types";
 
 import AiAssistantBot from './AiAssistantBot';
 import ComponentsList from "./ComponentsList";
 import AiResponses from "./AiResponses";
 import { ListsService } from "@tridion-sites/open-api-client";
-import MetaData from "./MetaData";
 import { DoubleLeftOutlined, DoubleRightOutlined } from "@ant-design/icons";
 import { getConfiguration } from '@globals';
 
@@ -29,21 +28,6 @@ interface KeywordLink {
     Title: string;
 }
 
-interface Keyword {
-    $type: string;
-    Id: string;
-    Title: string;
-    Locale?: string;
-    ParentKeywords?: KeywordLink[];
-    RelatedKeywords?: unknown[];
-}
-
-interface Category {
-    $type: string;
-    Id: string;
-    Title: string;
-}
-
 interface KeywordTreeNode {
     type: string;
     title: string;
@@ -55,11 +39,11 @@ interface KeywordTreeNode {
 
 const { Content, Sider } = Layout;
 
-const content = [{
+/* const content = [{
     id: window.crypto.randomUUID(),
     content: "settlement Car Insurance: Claim Settlement When you purchase car insurance, you hope that you will never need to make a claim. However, accidents do happen, and when they do, it's important to know that your insurance company will be there to help you through the claim settlement process. The claim settlement process typically begins when you report the claim to your insurance company. You will need to provide details about the accident, such as the date, time, and location, as well as any injuries or damage that you sustained. Your insurance company will then investigate the claim and determine whether it is covered under your policy. If the claim",
     prompt: "Write a post about the following title :Car Insurance under the classification : claim"
-}]
+}] */
 const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentId, parentFolder, publicationId,schemaId, onCancel, onConfirm }: AiAssistantProps) => {
     const configuration = getConfiguration<IConfiguration>();
     const bedrockClient = {
@@ -88,69 +72,82 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
         additionalContext: null,
         tridion_keywords: null
     })
-
+    const [schemaList, setSchemaList] = useState<SchemaListTypes[]>([])
+    const [selectedSchema, setSelectedSchema] = useState<string | null>(null)
+    const [selectedFields, setSelectedFields] = useState<string>()
     useEffect(() => {
         setSelectedComponentId(currentComponentId)
         getCategorKeywords()
     }, [currentComponentId])
 
+    //Fetch Category and Keywords
     const getCategorKeywords = async () => {
-        const categories = await ListsService.getCategories({
-            escapedPublicationId: publicationId
-        });
-
-        const filteredCategories = categories.filter(
-            category => category.$type === "Category"
-        );
-
-        if (filteredCategories.length !== 0) {
-            const categoryTree = await Promise.all(
-                filteredCategories.map(async (category): Promise<KeywordTreeNode> => {
-                    const keywords: any[] = await ListsService.getKeywords({
-                        escapedItemId: category.Id
-                    });
-
-                    const keywordMap: Record<string, KeywordTreeNode> = {};
-                    const roots: KeywordTreeNode[] = [];
-
-                    keywords.forEach((keyword) => {
-                        keywordMap[keyword.Id] = {
-                            type: keyword.$type,
-                            title: keyword.Title,
-                            label: keyword.Title,
-                            key: keyword.Id,
-                            value: keyword.Id,
-                            children: []
-                        };
-                    })
-
-                    keywords.forEach(keyword => {
-                        if (keyword.ParentKeywords?.length > 0) {
-                            keyword.ParentKeywords.forEach((parent: KeywordLink) => {
-                                const parentId = parent.IdRef;
-                                if (keywordMap[parentId]) {
-                                    keywordMap[parentId].children.push(keywordMap[keyword.Id]);
+        try{
+            // Fetch Categories using ListService
+            const categories = await ListsService.getCategories({
+                escapedPublicationId: publicationId
+            });
+    
+            // Filter to exclude poolparty and other external Categories
+            const filteredCategories = categories.filter(
+                category => category.$type === "Category"
+            );
+    
+            if (filteredCategories.length !== 0) {
+                try{
+                    const categoryTree = await Promise.all(
+                        filteredCategories.map(async (category): Promise<KeywordTreeNode> => {
+                            //Fetch keywords from the category
+                            const keywords: any[] = await ListsService.getKeywords({
+                                escapedItemId: category.Id
+                            });
+        
+                            const keywordMap: Record<string, KeywordTreeNode> = {};
+                            const roots: KeywordTreeNode[] = [];
+        
+                            keywords.forEach((keyword) => {
+                                keywordMap[keyword.Id] = {
+                                    type: keyword.$type,
+                                    title: keyword.Title,
+                                    label: keyword.Title,
+                                    key: keyword.Id,
+                                    value: keyword.Id,
+                                    children: []
+                                };
+                            })
+        
+                            keywords.forEach(keyword => {
+                                if (keyword.ParentKeywords?.length > 0) {
+                                    keyword.ParentKeywords.forEach((parent: KeywordLink) => {
+                                        const parentId = parent.IdRef;
+                                        if (keywordMap[parentId]) {
+                                            keywordMap[parentId].children.push(keywordMap[keyword.Id]);
+                                        }
+                                    });
+                                } else {
+                                    roots.push(keywordMap[keyword.Id]);
                                 }
                             });
-                        } else {
-                            roots.push(keywordMap[keyword.Id]);
-                        }
-                    });
+        
+                            return {
+                                type: category.$type,
+                                title: category.Title,
+                                label: category.Title,
+                                key: category.Id,
+                                value: category.Id,
+                                children: roots
+                            } as KeywordTreeNode;
+                        })
+                    );
+                    setCategoryKeywords(categoryTree);
+                }catch(error){
+                    console.error("Failed to fetch keywords from the category", error)
+                }
 
-                    return {
-                        type: category.$type,
-                        title: category.Title,
-                        label: category.Title,
-                        key: category.Id,
-                        value: category.Id,
-                        children: roots
-                    } as KeywordTreeNode;
-                })
-            );
-
-            setCategoryKeywords(categoryTree);
+            }
+        }catch(error){
+           console.error("Failed to fetch the Categories", error)           
         }
-
     }
     const generateAiContent = async () => {
         //console.log(configuration?.BedrockRuntimeClient?.prompt.promptWithAdditionalContext || '')
@@ -158,7 +155,8 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
         //console.log(configuration?.BedrockRuntimeClient?.prompt.promptWithoutAdditionalContext || '')
         // const prompt = `Generate more content using the keywords: ${aiPrompt.metadata} and context: ${aiPrompt.context}`
         //const promptWithAdditionalContext = `Generate more content using the keywords: ${aiPrompt.metadata},${aiPrompt.tridion_keywords}, context: ${aiPrompt.context} and additional context ${aiPrompt.additionalContext}`
-
+        
+        //Propmts for content generation
         const prompt = configuration?.BedrockRuntimeClient?.prompt.promptWithoutAdditionalContext
             .replace("${metadata}", aiPrompt.metadata || "" as string)
             .replace("${title}", aiPrompt.context || "" as string) as string
@@ -173,6 +171,7 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
         try {
             
             setAiContentLoading(true)
+            // AWS Bedrock client service for content generation
             const response = await BedrockAiService(promptData as string, bedrockClient, configuration?.BedrockRuntimeClient.model as BedRockModel);
             setAiGeneratedContent([
                 ...aiGeneratedContent,
@@ -185,7 +184,7 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
             ])
             setAiContentLoading(false)
         } catch (error) {
-            console.log(error)
+            console.error("Faied to generate the AI Content",error)
             setAiContentLoading(false)
             notify({
                 title: "Failed",
@@ -194,6 +193,8 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
             })
         }
     }
+
+    //Regenrate the content using Bedrock client service
     const regenerateAiContent = async(e:MouseEvent<HTMLButtonElement>) => {
         const id = e.currentTarget.id;
         const prompt = aiGeneratedContent.filter(item => item.id===id)[0].prompt;
@@ -217,7 +218,7 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
             }
             setAiContentLoading(false)
         } catch (error) {
-            console.log(error)
+            console.error("Failed to regenerate the AI Content",error)
             setAiContentLoading(false)
             notify({
                 title: "Failed",
@@ -226,12 +227,15 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
             })
         }
     }
+
+    //Setting the additional context checkbox to show addition context input fields
     const handleAdditionalContext = (e: CheckboxChangeEvent) => {
         if (e.target.checked) {
             setShowComponentList(false)
         }
         setIncludeAdditionalContext(!includeAdditionalContext)
     }
+    // show/hide folder structure tree items
     const toggleComponentList = () => {
         setShowComponentList(!showComponentList)
     }
@@ -284,8 +288,13 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                                                     selectedComponentId={selectedComponentId as string}
                                                     showComponentList={showComponentList}
                                                     aiPrompt={aiPrompt}
+                                                    selectedSchema={selectedSchema as string}
+                                                    selectedFields={selectedFields as string}
+                                                    schemaList={schemaList}
+                                                    setSelectedSchema={setSelectedSchema}
+                                                    setSelectedFields={setSelectedFields}
+                                                    setSchemaList = {setSchemaList} 
                                                     setSelectedComponentId={setSelectedComponentId}
-                                                    toggleComponentList={toggleComponentList}
                                                     setAiPrompt={setAiPrompt}
                                                 />
                                             },
@@ -296,7 +305,15 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                                                      categoryKeywords={categoryKeywords}
                                                  />,
  
-                                             } */
+                                             } 
+                                             {
+                                                key:"schema",
+                                                label:"Schema",
+                                                children:<SchemaList 
+                                                    setSchemaList = {setSchemaList}  
+                                                    schemaList={schemaList}
+                                                />
+                                             }*/
                                         ]
                                     }
                                     tabBarExtraContent={{
@@ -308,7 +325,6 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                                         />
                                     }}
                                 />
-
                             </Flex>
                         }
                         {showComponentList && <DoubleRightOutlined style={{ padding: "15px 35px" }} onClick={toggleComponentList} />}
@@ -324,7 +340,7 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                                 <AiAssistantBot
                                     aiPrompt={aiPrompt}
                                     includeAdditionalContext={includeAdditionalContext}
-                                    categoryKeywords={categoryKeywords}
+                                    categoryKeywords={categoryKeywords}                                    
                                     setAiPrompt={setAiPrompt}
                                     handleAdditionalContext={handleAdditionalContext}
                                 />
@@ -332,6 +348,7 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                                     aiPrompt={aiPrompt}
                                     tcmUri={currentFolderId}
                                     schemaId={schemaId}
+                                    selectedSchema={selectedSchema as string}
                                     aiGeneratedContent={aiGeneratedContent}
                                     aiContentLoading={aiContentLoading}
                                     regenerateAiContent={regenerateAiContent}
@@ -339,7 +356,6 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                             </Flex>
                         </Content>
                     </Layout>
-
                 </Layout>
             </ModalContent>
             <ModalFooter
@@ -349,7 +365,6 @@ const AiAssistantModal = memo(({ currentFolderId, folderTitle, currentComponentI
                 cancelButtonLabel='Cancel'
                 isOkButtonDisabled={(aiPrompt.context === null && aiPrompt.metadata === null && aiPrompt.additionalContext === null) || aiContentLoading}
             />
-
         </ConfigProvider>
     )
 })

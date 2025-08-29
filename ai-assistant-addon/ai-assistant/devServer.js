@@ -35,7 +35,7 @@ export const getDevServerConfig = ({ targetUrl, manifestPath, addonConfigPath })
                 webAppPath,
                 manifestPath,
                 addonConfigPath,
-               // targetUrl,
+                targetUrl,
             });
 
             return middlewares;

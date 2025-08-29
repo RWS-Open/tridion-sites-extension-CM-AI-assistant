@@ -17,7 +17,8 @@ export interface FolderItems {
     Type: string
     Id: string,
     Title: string;
-    Icon: ReactNode
+    Icon: ReactNode;
+    linkedSchema:string;
 }
 
 export interface IConfiguration {
@@ -52,4 +53,14 @@ interface Prompt{
 interface ExtensionProperties{
     modalHeaderTitle:string;
     modalFormHeading:string
+}
+
+export interface SchemaListTypes{
+    value:string;
+    label:string;
+} 
+
+export interface SchemaFields{
+    value:string;
+    label:string;
 }

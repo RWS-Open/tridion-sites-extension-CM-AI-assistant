@@ -1,0 +1,29 @@
+{
+    "configuration":{
+        "ai-assistant":{
+			"BedrockRuntimeClient":{
+				"region":"",
+				"credentials":{
+					"accessKeyId": "",
+					"secretAccessKey": ""
+				},
+				"model":{
+					"modelId":"anthropic.claude-3-5-sonnet-20240620-v1:0",
+					"anthropic_version":"bedrock-2023-05-31",
+					"max_tokens":1000,
+					"temperature":0.7,
+					"role":"user"
+				},
+				"prompt":{
+					"promptWithoutAdditionalContext":"Write an article about the following title :${title} under the classification :${metadata}",
+					"promptWithAdditionalContext":"Write an article about the following title :${title}, metadata :${metadata}, keywords :${tridion_keywords} and additional context :${additionalContext}",
+					"retryPrompt":"Retry the following :${prompt}"
+				}
+			},
+			"extensionProperties":{
+				"modalHeaderTitle":"AI Authoring Assistant",
+				"modalFormHeading":"AI Assistant"
+			}
+        }
+    }
+}

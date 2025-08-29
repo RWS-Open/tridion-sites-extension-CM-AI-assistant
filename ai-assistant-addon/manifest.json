@@ -1,0 +1,21 @@
+{
+    "id": "ai-assistant-addon",
+    "name": "AiAssistant",
+    "author": "RWS",
+    "description": "addon for tridion sites components content generation",
+    "manifestVersion": "1.0.0",
+    "requireConfiguration": "yes",
+    "version": "1.0.0",
+    "extensions": [
+        {
+            "name": "ai-assistant",
+            "type": "ExperienceSpaceExtension",
+            "properties": {
+                "main": "dist\\ai-assistant\\main.js",
+                "files": [
+                    "dist\\ai-assistant\\main.js"
+                ]
+            }
+        }
+    ]
+}
